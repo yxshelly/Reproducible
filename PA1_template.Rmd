@@ -1,0 +1,231 @@
+# Reproducible Research - Project 1
+
+## Xiao Yu
+
+### Examining data from a personal activity monitoring device 
+
+==============================================================
+
+## Loading and Preprocessing the Data
+
+```{r chunk for loading and reading data, results="hide"}
+## load packages and set work directory
+setwd("/Users/yxshelly/Desktop/data_science/c5_reproducible research")
+library(dplyr); library(plyr); library(ggplot2)
+setwd("/Users/yxshelly/Desktop/data_science/c5_reproducible research")
+if(!file.exists("data")) {
+        dir.create("data")
+}
+## download data from the website to "data"
+path <- getwd()
+download.file(url = "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip",
+              destfile = paste(path, "data/files.zip", sep = "/"))
+list.files("./data")
+unzip(zipfile = "data/files.zip")
+# document the date downloaded
+dataDownloaded <- date()
+```
+
+### load the data and briefly examine
+```{r loading data} 
+activity <-read.csv("activity.csv")
+str(activity)
+head(activity)
+```
+
+===========================================================================
+
+## What is mean total number of steps taken per day?
+
+### 1. Calculate the total number of steps taken per day
+
+```{r}
+totalSteps <- ddply(activity, "date", summarise, tot=sum(steps), na.rm=T)
+head(totalSteps)
+```
+
+### 2. Make a histogram of the total number of steps taken each day
+
+```{r plotting saving to figure folder, results= "hide", echo=FALSE}
+jpeg("figure/figure1.jpeg", height=600, width=800, quality=8000)
+ggplot(totalSteps, aes(x=tot)) +
+        geom_histogram(fill= "red", binwidth=1000) +
+        labs(title = "Histogram of Total Number of Daily Steps", x = "Steps", y = "Frequency")
+dev.off()
+```
+
+```{r plotting showing the figure}
+ggplot(totalSteps, aes(x=tot)) +
+        geom_histogram(fill= "red", binwidth=1000) +
+        labs(title = "Histogram of Total Number of Daily Steps", x = "Steps", y = "Frequency")
+```
+
+### 3. Calculate and report the mean and median of the total number of steps taken per day
+
+```{r calculating mean and median}
+summary(totalSteps$tot)
+```
+
+===========================================================================
+
+## What is the average daily activity pattern?
+
+### 1. Make a time series plot of the 5-minute interval (x-axis) 
+
+```{r code making plot}
+# recode interval to factor variable 
+activity$interval <- factor(activity$interval)
+
+# calculate average steps per interval across days
+avePattern <- ddply(activity, "interval", summarise, average=mean(steps, na.rm=T))
+head(avePattern, 10)
+str(avePattern)
+```
+
+``` {r code saving figure to folder, results = "hide", echo = FALSE}
+jpeg("figure/figure2.jpeg", height=600, width=800, quality=8000)
+plot(avePattern$interval, avePattern$average, 
+     xlab="interval", ylab="average of steps", type="l",
+     main="Average Daily Activity Pattern")
+lines(avePattern$average)
+dev.off()
+```
+
+```{r code showing the figure}
+plot(avePattern$interval, avePattern$average, 
+     xlab="interval", ylab="average of steps", type="l",
+     main="Average Daily Activity Pattern")
+lines(avePattern$average)
+```
+
+### 2. Which 5-minute interval contains the maximum number of steps?
+
+```{r code arranging the data in decreasing order}
+max <- arrange(avePattern, average, decreasing = TRUE)
+head(max)
+```
+
+===========================================================================
+
+## Imputing missing values
+
+### 1. Calculate and report the total number of missing values in the dataset 
+
+```{r}
+summary(activity$steps)
+```
+
+### 2. Impute missing values using the median
+
+```{r imputing with median}
+# Check the column names containing missing observations 
+list_na <- colnames(activity)[apply(activity, 2, anyNA)]
+list_na
+
+# Replace missing values with the mean
+activity_impute_median <- data.frame(
+        sapply(activity,
+                function(x) ifelse(is.na(x),
+                                   median(x, na.rm = TRUE),
+                                   x)))
+
+```
+
+### 3. Create a new dataset 
+
+```{r}
+summary(activity_impute_median$steps)
+```
+
+### 4. Histogram of the total number of steps using imputed data
+
+```{r}
+totalSteps2 <- ddply(activity_impute_median, "date", summarise, tot=sum(steps))
+head(totalSteps2)
+```
+
+```{r plotting saving data, results="hide", echo=FALSE}
+jpeg("figure/figure3.jpeg", height=600, width=800, quality=8000)
+ggplot(totalSteps2, aes(x=tot)) +
+        geom_histogram(fill= "blue", binwidth=1000) +
+        labs(title = "Histogram of Total Number of Daily Steps, Imputed", x = "Steps", y = "Frequency")
+dev.off()
+```
+
+```{r plotting showing figure}
+ggplot(totalSteps2, aes(x=tot)) +
+        geom_histogram(fill= "blue", binwidth=1000) +
+        labs(title = "Histogram of Total Number of Daily Steps, Imputed", x = "Steps", y = "Frequency")
+```
+
+```{r calculating mean and median of the new data set}
+summary(totalSteps2$tot)
+```
+
+#### with NA data, mean and median are 10766 and 10755
+
+#### with imputed data (filled with median), the new mean and median are 9354 and 10395
+
+===========================================================================
+
+## Are there differences  between weekdays and weekends?
+
+### 1. Create a new factor variable indicating whether a given date is a weekday or weekend day.
+
+```{r creating weekday indicator}
+# change date to date format
+activity_impute_median$date <- as.Date(activity$date, format = "%Y-%m-%d")
+activity_impute_median$day <-weekdays(activity_impute_median$date)
+
+# binary indicator
+activity_impute_median$day <-gsub("Monday|Tuesday|Wednesday|Thursday|Friday", "weekday", activity_impute_median$day) 
+activity_impute_median$day <-gsub("Saturday|Sunday","weekend", activity_impute_median$day)  
+table(activity_impute_median$day)
+str(activity_impute_median)
+```
+
+### 2. Figure of daily pattern by weekday/weekend
+
+```{r code plotting}
+activity_impute_median$interval <- factor(activity_impute_median$interval)
+activity_impute_median$day <- factor(activity_impute_median$day)
+
+# summarize by weekday/weekend
+act1 <- filter(activity_impute_median, activity_impute_median$day=="weekday")
+aveP1 <- ddply(act1, "interval", summarise, average=mean(steps))
+head(aveP1, 10)
+
+act2 <- filter(activity_impute_median, activity_impute_median$day=="weekend")
+aveP2 <- ddply(act2, "interval", summarise, average=mean(steps))
+head(aveP1, 10)
+```
+
+
+```{r plotting by weekday/weekend}
+par(mfrow=c(2, 1))
+plot(aveP1$interval, aveP1$average, 
+     xlab="interval", ylab="average of steps", type="l",
+     main="Average Daily Activity Pattern - Weekdays")
+lines(aveP1$average, col="blue")
+
+plot(aveP2$interval, aveP2$average, 
+     xlab="interval", ylab="average of steps", type="l",
+     main="Average Daily Activity Pattern - Weekends")
+lines(aveP2$average, col="red")
+```
+
+```{r plotting saving figure, results="hide", echo=FALSE}
+jpeg("figure/figure4.jpeg", height=600, width=800, quality=8000)
+par(mfrow=c(2, 1))
+plot(aveP1$interval, aveP1$average, 
+     xlab="interval", ylab="average of steps", type="l",
+     main="Average Daily Activity Pattern - Weekdays")
+lines(aveP1$average, col="blue")
+
+plot(aveP2$interval, aveP2$average, 
+     xlab="interval", ylab="average of steps", type="l",
+     main="Average Daily Activity Pattern - Weekends")
+lines(aveP2$average, col="red")
+dev.off()
+```
+
